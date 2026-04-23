@@ -1,6 +1,7 @@
 from pathlib import Path
 import random
 import re
+from datetime import datetime
 
 import matplotlib
 # Use a non-interactive backend to avoid Tk-related hangs in headless/debug environments.
@@ -48,6 +49,8 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
         weight_decay=0.0,
         random_state=42,
         device="cpu",
+        verbose=False,
+        log_interval=5,
     ):
         self.hidden_layer_sizes = hidden_layer_sizes
         self.learning_rate = learning_rate
@@ -56,6 +59,8 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
         self.weight_decay = weight_decay
         self.random_state = random_state
         self.device = device
+        self.verbose = verbose
+        self.log_interval = log_interval
 
     @staticmethod
     def _to_float_array(X):
@@ -100,7 +105,9 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
         self.model_.train()
-        for _ in range(self.max_epochs):
+        for epoch in range(self.max_epochs):
+            epoch_loss = 0.0
+            batch_count = 0
             for batch_x, batch_y in loader:
                 batch_x = batch_x.to(self.device_)
                 batch_y = batch_y.to(self.device_)
@@ -110,6 +117,16 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
                 loss = criterion(logits, batch_y)
                 loss.backward()
                 optimizer.step()
+
+                epoch_loss += float(loss.item())
+                batch_count += 1
+
+            if self.verbose and ((epoch + 1) % self.log_interval == 0 or epoch == 0 or epoch + 1 == self.max_epochs):
+                avg_loss = epoch_loss / max(batch_count, 1)
+                print(
+                    f"[DEBUG][TorchMLP] epoch={epoch + 1}/{self.max_epochs} avg_loss={avg_loss:.6f}",
+                    flush=True,
+                )
 
         self.classes_ = np.array([0, 1], dtype=int)
         self.n_features_in_ = X_np.shape[1]
@@ -134,6 +151,11 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
 sns.set_theme(style="whitegrid")
 
 
+def _debug(message: str) -> None:
+    ts = datetime.now().strftime("%H:%M:%S")
+    print(f"[{ts}][DEBUG] {message}", flush=True)
+
+
 def prepare_data(base_dir: Path):
     """Load data and apply the same cleaning and feature engineering as Section 3."""
     csv_path = base_dir / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
@@ -155,7 +177,9 @@ def prepare_data(base_dir: Path):
 
 def evaluate_pipeline(name: str, pipeline: Pipeline, X_train, y_train, X_test, y_test) -> dict:
     """Train and evaluate one model pipeline, returning core metrics."""
+    _debug(f"Start training pipeline: {name}")
     pipeline.fit(X_train, y_train)
+    _debug(f"Finished fitting pipeline: {name}")
     y_pred = pipeline.predict(X_test)
     y_prob = pipeline.predict_proba(X_test)[:, 1]
 
@@ -169,6 +193,9 @@ def evaluate_pipeline(name: str, pipeline: Pipeline, X_train, y_train, X_test, y
         cv=cv,
         scoring="roc_auc",
         n_jobs=cv_n_jobs,
+    )
+    _debug(
+        f"CV finished for {name}: mean={float(np.mean(cv_auc_scores)):.4f}, std={float(np.std(cv_auc_scores)):.4f}"
     )
 
     result = {
@@ -220,6 +247,8 @@ def tune_advanced_models(preprocessor: ColumnTransformer, X_train, y_train):
                 random_state=42,
                 max_epochs=40,
                 device="cpu",
+                verbose=True,
+                log_interval=10,
             ),
             {
                 "model__hidden_layer_sizes": [(32,), (64,), (64, 32)],
@@ -232,6 +261,11 @@ def tune_advanced_models(preprocessor: ColumnTransformer, X_train, y_train):
 
     tuned_results = {}
     for model_name, (model, param_grid) in advanced_models.items():
+        grid_size = 1
+        for values in param_grid.values():
+            grid_size *= len(values)
+        _debug(f"GridSearch start: {model_name} (grid_size={grid_size}, cv=5)")
+
         pipeline = Pipeline(
             steps=[
                 ("preprocessor", preprocessor),
@@ -245,9 +279,12 @@ def tune_advanced_models(preprocessor: ColumnTransformer, X_train, y_train):
             scoring="roc_auc",
             cv=cv,
             n_jobs=1 if model_name == "NeuralNetwork" else -1,
-            verbose=0,
+            verbose=2,
         )
         search.fit(X_train, y_train)
+        _debug(
+            f"GridSearch done: {model_name} | best_score={search.best_score_:.4f} | best_params={search.best_params_}"
+        )
         tuned_results[model_name] = search
     return tuned_results
 
@@ -421,8 +458,12 @@ def main() -> None:
     base_dir = Path(__file__).resolve().parent
     output_dir = base_dir / "img" / "ai_data_img"
 
+    _debug("Section 4 pipeline started")
+
     X_train, X_test, y_train, y_test = prepare_data(base_dir)
+    _debug(f"Data ready: X_train={X_train.shape}, X_test={X_test.shape}")
     preprocessor = build_preprocessor(X_train)
+    _debug("Preprocessor initialized")
 
     # Baseline model: Logistic Regression.
     baseline_pipeline = Pipeline(
@@ -442,14 +483,19 @@ def main() -> None:
         X_test=X_test,
         y_test=y_test,
     )
+    _debug(
+        f"Baseline metrics: acc={baseline_result['accuracy']:.4f}, f1={baseline_result['f1']:.4f}, auc={baseline_result['roc_auc']:.4f}"
+    )
 
     # Advanced models: Decision Tree / Random Forest / Gradient Boosting / Neural Network
     # with hyperparameter tuning.
     tuned_searches = tune_advanced_models(preprocessor, X_train, y_train)
+    _debug("All advanced model grid searches completed")
 
     advanced_results = []
     for model_name, search in tuned_searches.items():
         best_pipeline = search.best_estimator_
+        _debug(f"Evaluate tuned model: {model_name}")
         result = evaluate_pipeline(
             name=model_name,
             pipeline=best_pipeline,
@@ -460,9 +506,13 @@ def main() -> None:
         )
         result["best_params"] = search.best_params_
         advanced_results.append(result)
+        _debug(
+            f"Tuned model metrics [{model_name}]: acc={result['accuracy']:.4f}, f1={result['f1']:.4f}, auc={result['roc_auc']:.4f}"
+        )
 
     # Select the advanced model with the highest test ROC-AUC.
     best_advanced = sorted(advanced_results, key=lambda d: d["roc_auc"], reverse=True)[0]
+    _debug(f"Best advanced model selected: {best_advanced['model']} (auc={best_advanced['roc_auc']:.4f})")
 
     # Aggregate and save evaluation metrics.
     rows = [baseline_result] + advanced_results
@@ -493,11 +543,13 @@ def main() -> None:
         all_results=rows,
         metrics_table=metrics_table,
     )
+    _debug("All section 4 figures exported")
 
     print("=== Section 4: Modeling and Evaluation Completed ===")
     print(metrics_table.to_string(index=False))
     print(f"\nBest advanced model: {best_advanced['model']}")
     print(f"Best advanced model parameters: {best_advanced['best_params']}")
+    _debug("Section 4 pipeline completed")
 
 
 if __name__ == "__main__":
