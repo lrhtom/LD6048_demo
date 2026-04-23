@@ -1,5 +1,6 @@
 from pathlib import Path
 import random
+import re
 
 import matplotlib
 # Use a non-interactive backend to avoid Tk-related hangs in headless/debug environments.
@@ -262,6 +263,13 @@ def plot_outputs(
     """Generate confusion matrix, ROC comparison, and feature importance plots."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Export standalone result charts for each model into a separate folder.
+    per_model_dir = output_dir / "section4_per_model"
+    per_model_dir.mkdir(parents=True, exist_ok=True)
+
+    def _model_slug(name: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+
     # Figure 1: Confusion matrix for the best advanced model.
     fig, ax = plt.subplots(figsize=(6, 6))
     ConfusionMatrixDisplay.from_predictions(
@@ -369,6 +377,43 @@ def plot_outputs(
         plt.xlabel("Importance")
         plt.tight_layout()
         plt.savefig(output_dir / "section4_feature_importance.png", dpi=300)
+        plt.close()
+
+    # Per-model standalone outputs: confusion matrix and ROC curve.
+    for result in all_results:
+        model_name = result["model"]
+        model_slug = _model_slug(model_name)
+
+        # Standalone confusion matrix for each model.
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ConfusionMatrixDisplay.from_predictions(
+            y_test,
+            result["y_pred"],
+            display_labels=["No Churn", "Churn"],
+            cmap="Blues",
+            ax=ax,
+        )
+        plt.title(f"Confusion Matrix - {model_name}")
+        plt.tight_layout()
+        plt.savefig(per_model_dir / f"section4_confusion_matrix_{model_slug}.png", dpi=300)
+        plt.close()
+
+        # Standalone ROC curve for each model.
+        fpr_model, tpr_model, _ = roc_curve(y_test, result["y_prob"])
+        plt.figure(figsize=(8, 6))
+        plt.plot(
+            fpr_model,
+            tpr_model,
+            linewidth=2,
+            label=f"{model_name} (AUC={result['roc_auc']:.3f})",
+        )
+        plt.plot([0, 1], [0, 1], "k--", label="Random")
+        plt.xlabel("False Positive Rate")
+        plt.ylabel("True Positive Rate")
+        plt.title(f"ROC Curve - {model_name}")
+        plt.legend(loc="lower right")
+        plt.tight_layout()
+        plt.savefig(per_model_dir / f"section4_roc_{model_slug}.png", dpi=300)
         plt.close()
 
 
