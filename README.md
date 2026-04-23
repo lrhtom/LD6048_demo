@@ -30,19 +30,20 @@ python section4_modeling.py
 
 ## Model Results Snapshot (Current Run)
 
-| Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
-|---|---:|---:|---:|---:|---:|
-| LogisticRegression | 0.7299 | 0.4950 | 0.7888 | 0.6082 | 0.8370 |
-| DecisionTree | 0.7065 | 0.4697 | 0.8075 | 0.5939 | 0.8229 |
-| RandomForest | 0.7598 | 0.5335 | 0.7674 | 0.6294 | 0.8342 |
-| GradientBoosting | 0.7953 | 0.6433 | 0.5160 | 0.5727 | 0.8389 |
-| NeuralNetwork (MLP) | 0.7747 | 0.5922 | 0.4893 | 0.5359 | 0.8162 |
+
+| Model               | Accuracy | Precision | Recall |     F1 | ROC-AUC |
+| ------------------- | -------: | --------: | -----: | -----: | ------: |
+| LogisticRegression  |   0.7299 |    0.4950 | 0.7888 | 0.6082 |  0.8370 |
+| DecisionTree        |   0.7065 |    0.4697 | 0.8075 | 0.5939 |  0.8229 |
+| RandomForest        |   0.7598 |    0.5335 | 0.7674 | 0.6294 |  0.8342 |
+| GradientBoosting    |   0.7953 |    0.6433 | 0.5160 | 0.5727 |  0.8389 |
+| NeuralNetwork (MLP) |   0.7747 |    0.5922 | 0.4893 | 0.5359 |  0.8162 |
 
 Note: The best advanced model is still `GradientBoosting`; `NeuralNetwork` has been included as a supplementary experiment in the full comparison.
 
 ## FAQ
 
 1. Plot scripts hang in debug environments or raise Tk-related errors:
-	- The scripts are configured to use the `Agg` backend for `matplotlib`. Please re-run using the latest scripts in this project.
+   - The scripts are configured to use the `Agg` backend for `matplotlib`. Please re-run using the latest scripts in this project.
 2. Preprocessing export reports `ndarray` has no attribute `format`:
-	- The script now consistently converts outputs to `csr_matrix` before saving. Please use the latest `section3_preprocessing.py`.
+   - The script now consistently converts outputs to `csr_matrix` before saving. Please use the latest `section3_preprocessing.py`.
