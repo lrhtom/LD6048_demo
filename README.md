@@ -17,9 +17,11 @@ This project is based on `WA_Fn-UseC_-Telco-Customer-Churn.csv` and covers the f
 
 ```powershell
 pip install -r requirements.txt
+start r.bat
 python section2_analysis.py
 python section3_preprocessing.py
 python section4_modeling.py
+& $rscript ".\section4_nn_structure_plot.R"
 ```
 
 ## Main Outputs
