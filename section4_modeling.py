@@ -18,7 +18,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
     accuracy_score,
+    average_precision_score,
     f1_score,
+    precision_recall_curve,
     precision_score,
     recall_score,
     roc_auc_score,
@@ -205,6 +207,7 @@ def evaluate_pipeline(name: str, pipeline: Pipeline, X_train, y_train, X_test, y
         "recall": recall_score(y_test, y_pred, zero_division=0),
         "f1": f1_score(y_test, y_pred, zero_division=0),
         "roc_auc": roc_auc_score(y_test, y_prob),
+        "pr_auc": average_precision_score(y_test, y_prob),
         "cv_roc_auc_mean": float(np.mean(cv_auc_scores)),
         "cv_roc_auc_std": float(np.std(cv_auc_scores)),
         "y_pred": y_pred,
@@ -366,8 +369,28 @@ def plot_outputs(
     plt.savefig(output_dir / "section4_roc_all_models.png", dpi=300)
     plt.close()
 
+    # Figure PR: Precision-Recall curve comparison across all models.
+    plt.figure(figsize=(8, 6))
+    no_skill = y_test.sum() / len(y_test)
+    plt.axhline(y=no_skill, color="gray", linestyle="--", linewidth=1, label=f"No Skill ({no_skill:.3f})")
+    for result in all_results:
+        precision_vals, recall_vals, _ = precision_recall_curve(y_test, result["y_prob"])
+        plt.plot(
+            recall_vals,
+            precision_vals,
+            linewidth=2,
+            label=f"{result['model']} (AP={result['pr_auc']:.3f})",
+        )
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title("Precision-Recall Curve Comparison (All Models)")
+    plt.legend(loc="upper right")
+    plt.tight_layout()
+    plt.savefig(output_dir / "section4_pr_compare.png", dpi=300)
+    plt.close()
+
     # Figure 4: Metric heatmap for all models.
-    metric_cols = ["accuracy", "precision", "recall", "f1", "roc_auc"]
+    metric_cols = ["accuracy", "precision", "recall", "f1", "roc_auc", "pr_auc"]
     heatmap_df = metrics_table.set_index("model")[metric_cols]
     plt.figure(figsize=(9, 5))
     sns.heatmap(heatmap_df, annot=True, fmt=".3f", cmap="YlGnBu", cbar=True)
@@ -453,6 +476,25 @@ def plot_outputs(
         plt.savefig(per_model_dir / f"section4_roc_{model_slug}.png", dpi=300)
         plt.close()
 
+        # Standalone Precision-Recall curve for each model.
+        precision_vals, recall_vals, _ = precision_recall_curve(y_test, result["y_prob"])
+        no_skill_val = y_test.sum() / len(y_test)
+        plt.figure(figsize=(8, 6))
+        plt.plot(
+            recall_vals,
+            precision_vals,
+            linewidth=2,
+            label=f"{model_name} (AP={result['pr_auc']:.3f})",
+        )
+        plt.axhline(y=no_skill_val, color="gray", linestyle="--", linewidth=1, label=f"No Skill ({no_skill_val:.3f})")
+        plt.xlabel("Recall")
+        plt.ylabel("Precision")
+        plt.title(f"Precision-Recall Curve - {model_name}")
+        plt.legend(loc="upper right")
+        plt.tight_layout()
+        plt.savefig(per_model_dir / f"section4_pr_{model_slug}.png", dpi=300)
+        plt.close()
+
 
 def main() -> None:
     base_dir = Path(__file__).resolve().parent
@@ -525,6 +567,7 @@ def main() -> None:
                 "recall": r["recall"],
                 "f1": r["f1"],
                 "roc_auc": r["roc_auc"],
+                "pr_auc": r["pr_auc"],
                 "cv_roc_auc_mean": r["cv_roc_auc_mean"],
                 "cv_roc_auc_std": r["cv_roc_auc_std"],
                 "best_params": r.get("best_params", {}),
